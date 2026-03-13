@@ -245,12 +245,14 @@ const BengaliKeyboard = (() => {
     let _romanBuffer = '';
     let _prevBengali = '';
     let _attachedInput = null;
+    let _keydownHandled = false;
 
     function getRomanBuffer() { return _romanBuffer; }
 
     function clearBuffer() {
         _romanBuffer = '';
         _prevBengali = '';
+        _keydownHandled = false;
     }
 
     /**
@@ -281,6 +283,8 @@ const BengaliKeyboard = (() => {
         _attachedInput = inputEl;
 
         inputEl.addEventListener('keydown', (e) => {
+            _keydownHandled = false;
+
             // Both online and offline use phonetic input
             if (!MODES.includes(currentMode)) return;
 
@@ -309,6 +313,7 @@ const BengaliKeyboard = (() => {
                     }
                     if (_romanBuffer.length > 0) {
                         e.preventDefault();
+                        _keydownHandled = true;
                         _romanBuffer = _romanBuffer.slice(0, -1);
                         _rebuildFromBuffer(inputEl, onChange);
                         if (onBufferChange) onBufferChange(_romanBuffer);
@@ -319,6 +324,7 @@ const BengaliKeyboard = (() => {
                 // Only intercept printable characters
                 if (e.key.length === 1) {
                     e.preventDefault();
+                    _keydownHandled = true;
 
                     // Space flushes and resets
                     if (e.key === ' ') {
@@ -334,6 +340,54 @@ const BengaliKeyboard = (() => {
                     }
 
                     _romanBuffer += e.key;
+                    _rebuildFromBuffer(inputEl, onChange);
+                    if (onBufferChange) onBufferChange(_romanBuffer);
+                }
+            }
+        });
+
+        // Mobile fallback: virtual keyboards fire beforeinput instead of keydown
+        inputEl.addEventListener('beforeinput', (e) => {
+            // Skip if keydown already handled this keystroke (desktop path)
+            if (_keydownHandled) {
+                _keydownHandled = false;
+                return;
+            }
+
+            // Only intercept when in a phonetic mode
+            if (!MODES.includes(currentMode)) return;
+
+            if (e.inputType === 'insertText' && e.data) {
+                e.preventDefault();
+                for (const ch of e.data) {
+                    if (ch === ' ') {
+                        // Space: flush buffer, insert space
+                        _romanBuffer = '';
+                        _prevBengali = '';
+                        const start = inputEl.selectionStart;
+                        const val = inputEl.value;
+                        inputEl.value = val.substring(0, start) + ' ' + val.substring(inputEl.selectionEnd);
+                        inputEl.selectionStart = inputEl.selectionEnd = start + 1;
+                        if (onChange) onChange(inputEl.value);
+                        if (onBufferChange) onBufferChange('');
+                    } else {
+                        _romanBuffer += ch;
+                        _rebuildFromBuffer(inputEl, onChange);
+                        if (onBufferChange) onBufferChange(_romanBuffer);
+                    }
+                }
+            } else if (e.inputType === 'deleteContentBackward') {
+                // Mobile backspace
+                if (inputEl.selectionStart !== inputEl.selectionEnd) {
+                    // Selection delete: let browser handle, clear buffer
+                    _romanBuffer = '';
+                    _prevBengali = '';
+                    if (onBufferChange) onBufferChange('');
+                    return;
+                }
+                if (_romanBuffer.length > 0) {
+                    e.preventDefault();
+                    _romanBuffer = _romanBuffer.slice(0, -1);
                     _rebuildFromBuffer(inputEl, onChange);
                     if (onBufferChange) onBufferChange(_romanBuffer);
                 }
