@@ -96,7 +96,8 @@ const App = (() => {
                     <p class="home-subtitle">গান সংকলন — ১,৯০৫ গান</p>
                     <div class="search-container" id="search-container">
                         <input type="text" class="search-bar" id="search-input"
-                               placeholder="গান খুঁজুন..." autocomplete="off">
+                               placeholder="গান খুঁজুন..." autocomplete="off"
+                               autocorrect="off" autocapitalize="none" spellcheck="false">
                         <button class="keyboard-toggle active" id="kb-toggle"
                                 title="${BengaliKeyboard.getModeTooltip()}">${BengaliKeyboard.getModeLabel()}</button>
                     </div>

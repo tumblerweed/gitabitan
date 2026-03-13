@@ -246,6 +246,8 @@ const BengaliKeyboard = (() => {
     let _prevBengali = '';
     let _attachedInput = null;
     let _keydownHandled = false;
+    let _beforeinputHandled = false;
+    let _expectedValue = '';  // tracks what we set, for input-event fallback
 
     function getRomanBuffer() { return _romanBuffer; }
 
@@ -253,6 +255,7 @@ const BengaliKeyboard = (() => {
         _romanBuffer = '';
         _prevBengali = '';
         _keydownHandled = false;
+        _beforeinputHandled = false;
     }
 
     /**
@@ -267,6 +270,7 @@ const BengaliKeyboard = (() => {
         const after = val.substring(pos);
         inputEl.value = base + text + after;
         inputEl.selectionStart = inputEl.selectionEnd = base.length + text.length;
+        _expectedValue = inputEl.value;
         _prevBengali = '';
         _romanBuffer = '';
     }
@@ -334,6 +338,7 @@ const BengaliKeyboard = (() => {
                         const val = inputEl.value;
                         inputEl.value = val.substring(0, start) + ' ' + val.substring(inputEl.selectionEnd);
                         inputEl.selectionStart = inputEl.selectionEnd = start + 1;
+                        _expectedValue = inputEl.value;
                         if (onChange) onChange(inputEl.value);
                         if (onBufferChange) onBufferChange('');
                         return;
@@ -346,8 +351,11 @@ const BengaliKeyboard = (() => {
             }
         });
 
-        // Mobile fallback: virtual keyboards fire beforeinput instead of keydown
+        // Mobile fallback: virtual keyboards fire beforeinput instead of keydown.
+        // Also handles iOS composition events (insertCompositionText).
         inputEl.addEventListener('beforeinput', (e) => {
+            _beforeinputHandled = false;
+
             // Skip if keydown already handled this keystroke (desktop path)
             if (_keydownHandled) {
                 _keydownHandled = false;
@@ -357,17 +365,20 @@ const BengaliKeyboard = (() => {
             // Only intercept when in a phonetic mode
             if (!MODES.includes(currentMode)) return;
 
-            if (e.inputType === 'insertText' && e.data) {
+            // Handle text insertion (regular and composition)
+            const isInsert = (e.inputType === 'insertText' || e.inputType === 'insertCompositionText');
+            if (isInsert && e.data) {
                 e.preventDefault();
+                _beforeinputHandled = true;
                 for (const ch of e.data) {
                     if (ch === ' ') {
-                        // Space: flush buffer, insert space
                         _romanBuffer = '';
                         _prevBengali = '';
                         const start = inputEl.selectionStart;
                         const val = inputEl.value;
                         inputEl.value = val.substring(0, start) + ' ' + val.substring(inputEl.selectionEnd);
                         inputEl.selectionStart = inputEl.selectionEnd = start + 1;
+                        _expectedValue = inputEl.value;
                         if (onChange) onChange(inputEl.value);
                         if (onBufferChange) onBufferChange('');
                     } else {
@@ -377,9 +388,7 @@ const BengaliKeyboard = (() => {
                     }
                 }
             } else if (e.inputType === 'deleteContentBackward') {
-                // Mobile backspace
                 if (inputEl.selectionStart !== inputEl.selectionEnd) {
-                    // Selection delete: let browser handle, clear buffer
                     _romanBuffer = '';
                     _prevBengali = '';
                     if (onBufferChange) onBufferChange('');
@@ -387,6 +396,7 @@ const BengaliKeyboard = (() => {
                 }
                 if (_romanBuffer.length > 0) {
                     e.preventDefault();
+                    _beforeinputHandled = true;
                     _romanBuffer = _romanBuffer.slice(0, -1);
                     _rebuildFromBuffer(inputEl, onChange);
                     if (onBufferChange) onBufferChange(_romanBuffer);
@@ -394,8 +404,75 @@ const BengaliKeyboard = (() => {
             }
         });
 
+        // Last-resort fallback: if neither keydown nor beforeinput handled the input,
+        // detect inserted Latin chars by comparing to expected value and process them.
+        // This catches iOS Safari edge cases where preventDefault() doesn't work.
+        inputEl.addEventListener('input', (e) => {
+            if (!MODES.includes(currentMode)) return;
+            if (_keydownHandled || _beforeinputHandled) {
+                _keydownHandled = false;
+                _beforeinputHandled = false;
+                return;
+            }
+
+            // Something was inserted that we didn't handle — figure out what
+            const current = inputEl.value;
+            if (current === _expectedValue) return; // no real change
+
+            // For deletions the browser already changed the value; sync state
+            if (e.inputType === 'deleteContentBackward' || e.inputType === 'deleteByCut'
+                || e.inputType === 'deleteContentForward') {
+                _romanBuffer = '';
+                _prevBengali = '';
+                _expectedValue = current;
+                if (onBufferChange) onBufferChange('');
+                if (onChange) onChange(current);
+                return;
+            }
+
+            // Extract inserted characters: the new chars are what's in current but not in expected
+            const data = e.data || '';
+            if (data && /^[a-zA-Z0-9 .,:;!?~^]+$/.test(data)) {
+                // Latin chars that slipped through — undo browser insertion, process via buffer
+                // Restore to expected state, then process each char
+                const pos = inputEl.selectionStart;
+                inputEl.value = _expectedValue;
+                // Restore cursor to where it was before the browser insertion
+                const restoredPos = pos - data.length;
+                inputEl.selectionStart = inputEl.selectionEnd = Math.max(0, restoredPos);
+
+                for (const ch of data) {
+                    if (ch === ' ') {
+                        _romanBuffer = '';
+                        _prevBengali = '';
+                        const start = inputEl.selectionStart;
+                        const val = inputEl.value;
+                        inputEl.value = val.substring(0, start) + ' ' + val.substring(inputEl.selectionEnd);
+                        inputEl.selectionStart = inputEl.selectionEnd = start + 1;
+                        _expectedValue = inputEl.value;
+                        if (onChange) onChange(inputEl.value);
+                        if (onBufferChange) onBufferChange('');
+                    } else {
+                        _romanBuffer += ch;
+                        _rebuildFromBuffer(inputEl, onChange);
+                        if (onBufferChange) onBufferChange(_romanBuffer);
+                    }
+                }
+            } else {
+                // Non-Latin or paste — accept as-is, reset buffer
+                _romanBuffer = '';
+                _prevBengali = '';
+                _expectedValue = current;
+                if (onBufferChange) onBufferChange('');
+                if (onChange) onChange(current);
+            }
+        });
+
         // Reset buffer on focus/blur
-        inputEl.addEventListener('focus', () => { clearBuffer(); });
+        inputEl.addEventListener('focus', () => {
+            clearBuffer();
+            _expectedValue = inputEl.value;
+        });
         inputEl.addEventListener('blur', () => {
             // Delay clearing so click on candidate dropdown can fire first
             setTimeout(() => { clearBuffer(); }, 200);
@@ -417,6 +494,7 @@ const BengaliKeyboard = (() => {
         el.value = base + bengali + after;
         el.selectionStart = el.selectionEnd = base.length + bengali.length;
         _prevBengali = bengali;
+        _expectedValue = el.value;
 
         if (onChange) onChange(el.value);
     }
