@@ -348,6 +348,14 @@ body {
     color: white;
     border-color: var(--accent);
 }
+.genre-chip.dimmed {
+    opacity: 0.35;
+    cursor: default;
+}
+.genre-chip.dimmed:hover {
+    border-color: var(--border);
+    color: var(--text-secondary);
+}
 .genre-chip .count {
     font-size: 0.7rem;
     opacity: 0.7;
@@ -647,6 +655,134 @@ body {
     flex: 1;
     color: var(--text);
 }
+
+/* === Downloads View === */
+.downloads-section-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 1.5rem 0 0.6rem;
+}
+.downloads-section-title:first-child {
+    margin-top: 0;
+}
+.download-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 1rem 1.3rem;
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-decoration: none;
+    color: inherit;
+}
+.download-card:hover {
+    border-color: var(--accent);
+    background: var(--surface-hover);
+}
+.download-name {
+    font-size: 1.05rem;
+    font-weight: 600;
+}
+.download-desc {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-top: 0.15rem;
+}
+.download-meta {
+    font-size: 0.85rem;
+    color: var(--text-tertiary);
+    white-space: nowrap;
+    margin-left: 1rem;
+}
+.downloads-unavailable {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 2rem;
+    line-height: 1.8;
+}
+
+/* Bundle details / terminal */
+.bundle-details {
+    margin-bottom: 1rem;
+}
+.bundle-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 1rem 1.3rem;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+    list-style: none;
+}
+.bundle-summary::-webkit-details-marker { display: none; }
+.bundle-summary::marker { content: ''; }
+.bundle-summary:hover {
+    border-color: var(--accent);
+    background: var(--surface-hover);
+}
+.bundle-details[open] .bundle-summary {
+    border-radius: 8px 8px 0 0;
+    border-bottom-color: transparent;
+}
+.bundle-download {
+    border-radius: 0 0 8px 8px;
+    border-top: 1px dashed var(--border);
+}
+
+/* Terminal */
+.terminal {
+    background: #1a1a2e;
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    overflow: hidden;
+}
+.terminal-titlebar {
+    background: #16213e;
+    padding: 0.5rem 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+.terminal-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+.terminal-dot.red { background: #e06c75; }
+.terminal-dot.yellow { background: #e5c07b; }
+.terminal-dot.green { background: #98c379; }
+.terminal-title {
+    flex: 1;
+    text-align: center;
+    font-size: 0.72rem;
+    color: #8892a8;
+    font-family: monospace;
+}
+.terminal-body {
+    padding: 1rem 1.2rem;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 0.82rem;
+    line-height: 1.6;
+    color: #abb2bf;
+    overflow-x: auto;
+    margin: 0;
+}
+.terminal-body .t-prompt { color: #98c379; }
+.terminal-body .t-cmd { color: #61afef; }
+.terminal-body .t-flag { color: #e5c07b; }
+.terminal-body .t-arg { color: #d19a66; }
+.terminal-body .t-dim { color: #5c6370; }
+.terminal-body .t-out { color: #abb2bf; }
+.terminal-body .t-brand { color: #c678dd; font-weight: 600; }
+.terminal-body .t-link { color: #56b6c2; text-decoration: underline; }
 
 /* === Loading State === */
 .loading {

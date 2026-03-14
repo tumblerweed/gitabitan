@@ -166,6 +166,37 @@ const SearchEngine = (() => {
         `, [pattern, pattern, limit]);
     }
 
+    /** Get per-genre hit counts for a search query (includes _dramas). */
+    function searchGenreCounts(text) {
+        if (!text || !text.trim()) return null;
+        const pattern = '%' + text.trim() + '%';
+        const rows = query(`
+            SELECT genre_slug, count(*) AS count
+            FROM songs
+            WHERE title_bn LIKE ? OR body_bn LIKE ?
+                  OR genre_bn LIKE ? OR sub_genre_bn LIKE ?
+            GROUP BY genre_slug
+        `, [pattern, pattern, pattern, pattern]);
+        const counts = {};
+        rows.forEach(r => { counts[r.genre_slug] = r.count; });
+
+        // Drama hit count
+        const dramaRows = query(`
+            SELECT count(*) AS count FROM drama_items
+            WHERE title_bn LIKE ? OR body_bn LIKE ?
+        `, [pattern, pattern]);
+        if (dramaRows.length > 0 && dramaRows[0].count > 0) {
+            counts['_dramas'] = dramaRows[0].count;
+        }
+        return counts;
+    }
+
+    /** Get total drama item count. */
+    function getDramaItemCount() {
+        const rows = query(`SELECT count(*) AS count FROM drama_items`);
+        return rows[0] ? rows[0].count : 0;
+    }
+
     /** Get adjacent songs for navigation. */
     function getAdjacentSongs(id) {
         const current = query(`SELECT global_sequence FROM songs WHERE id = ?`, [id]);
@@ -185,8 +216,8 @@ const SearchEngine = (() => {
     }
 
     return {
-        init, search, searchDramas, browseSongs, getSong,
+        init, search, searchDramas, searchGenreCounts, browseSongs, getSong,
         getGenres, getSubGenres, getGenre, getSubGenre,
-        getDramas, getDrama, getAdjacentSongs
+        getDramas, getDrama, getDramaItemCount, getAdjacentSongs
     };
 })();

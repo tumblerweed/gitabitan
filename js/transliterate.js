@@ -1,8 +1,7 @@
 /**
  * Transliteration Service — online (Google Input Tools) / offline (local rules).
  *
- * Online: Google Input Tools API via JSONP (works on any host, no proxy needed).
- *         On localhost, uses the proxy (/api/transliterate) for faster response.
+ * Online: Google Input Tools API via JSONP (works on any host, no CORS issues).
  * Offline: BengaliKeyboard.transliterate() → single candidate.
  *
  * Also tracks API reachability and dispatches status events.
@@ -13,8 +12,6 @@ const Transliterator = (() => {
     const CACHE_KEY = 'gitabitan-translit-cache';
     const MAX_CACHE = 500;
     const GOOGLE_API = 'https://inputtools.google.com/request';
-    const USE_PROXY = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-
     let mode = localStorage.getItem(MODE_KEY) || 'online';
     let _apiAvailable = null; // null = unknown, true/false after check
     let _jsonpId = 0;
@@ -63,21 +60,9 @@ const Transliterator = (() => {
         return [];
     }
 
-    // --- Proxy transport (for localhost dev with serve.py) ---
-
-    async function proxyFetch(text, num) {
-        const resp = await fetch(`/api/transliterate?t=${encodeURIComponent(text)}&num=${num}`);
-        if (!resp.ok) throw new Error(resp.status);
-        const data = await resp.json();
-        return data.candidates || [];
-    }
-
-    // --- Unified fetch (picks transport based on host) ---
+    // --- Fetch candidates via JSONP ---
 
     async function fetchCandidates(text, num) {
-        if (USE_PROXY) {
-            return await proxyFetch(text, num);
-        }
         const data = await googleJsonp(text, num);
         return parseGoogleResponse(data);
     }

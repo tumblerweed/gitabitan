@@ -1,0 +1,102 @@
+{
+  "pdfs": [
+    {
+      "file": "gitabitan.pdf",
+      "name": "গীতবিতান (সম্পূর্ণ)",
+      "description": "সকল গান একত্রে",
+      "size": "3.8 MB"
+    },
+    {
+      "file": "puja.pdf",
+      "name": "পূজা",
+      "size": "1.1 MB",
+      "count": 624
+    },
+    {
+      "file": "swadesh.pdf",
+      "name": "স্বদেশ",
+      "size": "203 KB",
+      "count": 46
+    },
+    {
+      "file": "prem.pdf",
+      "name": "প্রেম",
+      "size": "737 KB",
+      "count": 399
+    },
+    {
+      "file": "prakriti.pdf",
+      "name": "প্রকৃতি",
+      "size": "651 KB",
+      "count": 288
+    },
+    {
+      "file": "bichitra.pdf",
+      "name": "বিচিত্র",
+      "size": "372 KB",
+      "count": 140
+    },
+    {
+      "file": "anushtthanik.pdf",
+      "name": "আনুষ্ঠানিক",
+      "size": "100 KB",
+      "count": 21
+    },
+    {
+      "file": "anushtthanik-sangit.pdf",
+      "name": "আনুষ্ঠানিক সংগীত",
+      "size": "89 KB",
+      "count": 17
+    },
+    {
+      "file": "bhanusimha.pdf",
+      "name": "ভানুসিংহ ঠাকুরের পদাবলী",
+      "size": "106 KB",
+      "count": 20
+    },
+    {
+      "file": "natya-giti.pdf",
+      "name": "নাট্যগীতি",
+      "size": "272 KB",
+      "count": 133
+    },
+    {
+      "file": "jatiya-sangit.pdf",
+      "name": "জাতীয় সংগীত",
+      "size": "96 KB",
+      "count": 16
+    },
+    {
+      "file": "puja-o-prarthana.pdf",
+      "name": "পূজা ও প্রার্থনা",
+      "size": "200 KB",
+      "count": 90
+    },
+    {
+      "file": "prem-o-prakriti.pdf",
+      "name": "প্রেম ও প্রকৃতি",
+      "size": "466 KB",
+      "count": 105
+    },
+    {
+      "file": "pathantar-prem-o-prakriti.pdf",
+      "name": "পাঠান্তর প্রেম ও প্রকৃতি",
+      "size": "23 KB",
+      "count": 4
+    },
+    {
+      "file": "pathantar-bichitra.pdf",
+      "name": "পাঠান্তর বিচিত্র",
+      "size": "22 KB",
+      "count": 2
+    }
+  ],
+  "bundles": [
+    {
+      "file": "gitabitan-web.zip",
+      "name": "অফলাইন সংস্করণ",
+      "description": "ওয়েব অ্যাপের সম্পূর্ণ কপি — ইন্টারনেট ছাড়া চালানো যায়",
+      "size": "2.3 MB"
+    }
+  ]
+}

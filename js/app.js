@@ -33,6 +33,19 @@ const App = (() => {
     let genres = [];
     let searchTimeout = null;
     let activeGenreFilter = null;
+    let downloadsAvailable = null; // null = unknown, true/false after check
+
+    function headerBar() {
+        const dlLink = downloadsAvailable === true ? '<a href="#/downloads">ডাউনলোড</a>' : '';
+        return `<header class="header-bar">
+            <a class="logo" href="#/">রবীন্দ্রনাথ ঠাকুরের গীতবিতান</a>
+            <nav>
+                <a href="#/browse">রচনা</a>
+                <a href="#/dramas">নৃত্যনাট্য</a>
+                ${dlLink}
+            </nav>
+        </header>`;
+    }
 
     // Candidate dropdown state
     let candidateTimeout = null;
@@ -45,6 +58,19 @@ const App = (() => {
         try {
             await SearchEngine.init();
             genres = SearchEngine.getGenres();
+
+            // Check if downloads manifest exists, then show nav link
+            fetch('downloads/manifest.json', { method: 'HEAD' })
+                .then(r => {
+                    downloadsAvailable = r.ok;
+                    // Update nav bar if downloads became available
+                    const nav = document.querySelector('.header-bar nav');
+                    if (nav && downloadsAvailable) {
+                        nav.insertAdjacentHTML('beforeend', '<a href="#/downloads">ডাউনলোড</a>');
+                    }
+                })
+                .catch(() => { downloadsAvailable = false; });
+
             route();
             window.addEventListener('hashchange', route);
         } catch (err) {
@@ -67,6 +93,8 @@ const App = (() => {
             renderBrowseGenre(parts[1]);
         } else if (parts[0] === 'browse') {
             renderBrowseAll();
+        } else if (parts[0] === 'downloads') {
+            renderDownloads();
         } else if (parts[0] === 'dramas') {
             renderDramasView();
         } else if (parts[0] === 'drama' && parts[1]) {
@@ -83,13 +111,7 @@ const App = (() => {
 
         const app = document.getElementById('app');
         app.innerHTML = `
-            <header class="header-bar">
-                <a class="logo" href="#/">রবীন্দ্রনাথ ঠাকুরের গীতবিতান</a>
-                <nav>
-                    <a href="#/browse">রচনা</a>
-                    <a href="#/dramas">নাটক</a>
-                </nav>
-            </header>
+            ${headerBar()}
             <div class="main-content">
                 <div class="home-view" id="home-view">
                     <h1 class="home-title">রবীন্দ্রনাথ ঠাকুরের গীতবিতান</h1>
@@ -114,7 +136,7 @@ const App = (() => {
         Transliterator.checkApiHealth().then(() => updateApiNotification());
     }
 
-    function renderGenreChips() {
+    function renderGenreChips(hitCounts) {
         const container = document.getElementById('genre-chips');
         if (!container) return;
 
@@ -124,15 +146,40 @@ const App = (() => {
             g.slug !== 'anushtthanik-sangit'
         );
 
-        container.innerHTML = mainGenres.map(g => `
-            <span class="genre-chip" data-genre="${g.slug}"
-                  style="border-color: ${GENRE_COLORS[g.slug] || 'var(--border)'}">
-                ${esc(g.name_bn)} <span class="count">${g.count}</span>
+        const hasSearch = hitCounts != null;
+        const dramaCount = hasSearch
+            ? (hitCounts['_dramas'] || 0)
+            : SearchEngine.getDramaItemCount();
+
+        let html = mainGenres.map(g => {
+            const count = hasSearch ? (hitCounts[g.slug] || 0) : g.count;
+            const dimmed = hasSearch && count === 0;
+            const activeCls = activeGenreFilter === g.slug ? ' active' : '';
+            const dimCls = dimmed ? ' dimmed' : '';
+            return `
+                <span class="genre-chip${activeCls}${dimCls}" data-genre="${g.slug}"
+                      style="border-color: ${GENRE_COLORS[g.slug] || 'var(--border)'}">
+                    ${esc(g.name_bn)} <span class="count">${count}</span>
+                </span>
+            `;
+        }).join('');
+
+        // Drama chip
+        const dramaDimmed = hasSearch && dramaCount === 0;
+        const dramaActiveCls = activeGenreFilter === '_dramas' ? ' active' : '';
+        const dramaDimCls = dramaDimmed ? ' dimmed' : '';
+        html += `
+            <span class="genre-chip${dramaActiveCls}${dramaDimCls}" data-genre="_dramas"
+                  style="border-color: ${GENRE_COLORS['natya-giti'] || 'var(--border)'}">
+                নৃত্যনাট্য <span class="count">${dramaCount}</span>
             </span>
-        `).join('');
+        `;
+
+        container.innerHTML = html;
 
         container.querySelectorAll('.genre-chip').forEach(chip => {
             chip.addEventListener('click', () => {
+                if (chip.classList.contains('dimmed')) return;
                 const slug = chip.dataset.genre;
                 if (activeGenreFilter === slug) {
                     activeGenreFilter = null;
@@ -355,13 +402,28 @@ const App = (() => {
             if (homeView) homeView.classList.remove('has-results');
             const results = document.getElementById('results');
             if (results) results.innerHTML = '';
+            renderGenreChips();
+            return;
+        }
+
+        // Drama chip with no query → navigate to dramas page
+        if (!query && activeGenreFilter === '_dramas') {
+            activeGenreFilter = null;
+            location.hash = '#/dramas';
             return;
         }
 
         if (homeView) homeView.classList.add('has-results');
 
-        const songResults = SearchEngine.search(query, { genre: activeGenreFilter });
-        const dramaResults = query ? SearchEngine.searchDramas(query) : [];
+        const hitCounts = SearchEngine.searchGenreCounts(query);
+        renderGenreChips(hitCounts);
+
+        const isDramaFilter = activeGenreFilter === '_dramas';
+        const songGenre = (!activeGenreFilter || isDramaFilter) ? null : activeGenreFilter;
+
+        const songResults = isDramaFilter ? [] : SearchEngine.search(query, { genre: songGenre });
+        const dramaResults = (activeGenreFilter && !isDramaFilter) ? []
+            : (query ? SearchEngine.searchDramas(query) : []);
 
         renderResults(songResults, dramaResults, query);
     }
@@ -387,7 +449,7 @@ const App = (() => {
 
         // Drama results
         if (dramaResults.length > 0) {
-            html += `<div class="results-meta results-drama-header">নাটক — ${toBengaliDigits(dramaResults.length)} ফল</div>`;
+            html += `<div class="results-meta results-drama-header">নৃত্যনাট্য — ${toBengaliDigits(dramaResults.length)} ফল</div>`;
             html += dramaResults.map(d => renderDramaResultCard(d)).join('');
         }
 
@@ -461,9 +523,7 @@ const App = (() => {
 
         if (!song) {
             app.innerHTML = `
-                <header class="header-bar">
-                    <a class="logo" href="#/">রবীন্দ্রনাথ ঠাকুরের গীতবিতান</a>
-                </header>
+                ${headerBar()}
                 <div class="main-content">
                     <div class="song-view">
                         <a class="back-link" href="#/">← ফিরে যান</a>
@@ -478,13 +538,7 @@ const App = (() => {
         const notes = renderNotes(song.notes);
 
         app.innerHTML = `
-            <header class="header-bar">
-                <a class="logo" href="#/">রবীন্দ্রনাথ ঠাকুরের গীতবিতান</a>
-                <nav>
-                    <a href="#/browse">রচনা</a>
-                    <a href="#/dramas">নাটক</a>
-                </nav>
-            </header>
+            ${headerBar()}
             <div class="main-content">
                 <div class="song-view">
                     <a class="back-link" href="#/">← ফিরে যান</a>
@@ -690,13 +744,7 @@ const App = (() => {
     function renderBrowseAll() {
         const app = document.getElementById('app');
         app.innerHTML = `
-            <header class="header-bar">
-                <a class="logo" href="#/">রবীন্দ্রনাথ ঠাকুরের গীতবিতান</a>
-                <nav>
-                    <a href="#/browse">রচনা</a>
-                    <a href="#/dramas">নাটক</a>
-                </nav>
-            </header>
+            ${headerBar()}
             <div class="main-content">
                 <div class="browse-view">
                     <h1 class="browse-title">রচনা সমূহ</h1>
@@ -722,13 +770,7 @@ const App = (() => {
 
         if (subGenres.length > 0) {
             app.innerHTML = `
-                <header class="header-bar">
-                    <a class="logo" href="#/">রবীন্দ্রনাথ ঠাকুরের গীতবিতান</a>
-                    <nav>
-                        <a href="#/browse">রচনা</a>
-                        <a href="#/dramas">নাটক</a>
-                    </nav>
-                </header>
+                ${headerBar()}
                 <div class="main-content">
                     <div class="browse-view">
                         <div class="breadcrumb">
@@ -750,13 +792,7 @@ const App = (() => {
         } else {
             const songs = SearchEngine.browseSongs({ genre: genreSlug, limit: 1000 });
             app.innerHTML = `
-                <header class="header-bar">
-                    <a class="logo" href="#/">রবীন্দ্রনাথ ঠাকুরের গীতবিতান</a>
-                    <nav>
-                        <a href="#/browse">রচনা</a>
-                        <a href="#/dramas">নাটক</a>
-                    </nav>
-                </header>
+                ${headerBar()}
                 <div class="main-content">
                     <div class="browse-view">
                         <div class="breadcrumb">
@@ -781,13 +817,7 @@ const App = (() => {
         const songs = SearchEngine.browseSongs({ genre: genreSlug, subGenre: subGenreSlug, limit: 1000 });
 
         app.innerHTML = `
-            <header class="header-bar">
-                <a class="logo" href="#/">রবীন্দ্রনাথ ঠাকুরের গীতবিতান</a>
-                <nav>
-                    <a href="#/browse">রচনা</a>
-                    <a href="#/dramas">নাটক</a>
-                </nav>
-            </header>
+            ${headerBar()}
             <div class="main-content">
                 <div class="browse-view">
                     <div class="breadcrumb">
@@ -823,16 +853,10 @@ const App = (() => {
         const dramas = SearchEngine.getDramas();
 
         app.innerHTML = `
-            <header class="header-bar">
-                <a class="logo" href="#/">রবীন্দ্রনাথ ঠাকুরের গীতবিতান</a>
-                <nav>
-                    <a href="#/browse">রচনা</a>
-                    <a href="#/dramas">নাটক</a>
-                </nav>
-            </header>
+            ${headerBar()}
             <div class="main-content">
                 <div class="browse-view">
-                    <h1 class="browse-title">নাট্যগীতি</h1>
+                    <h1 class="browse-title">নৃত্যনাট্য</h1>
                     <p class="browse-subtitle">নৃত্যনাট্য ও গীতিনাট্য</p>
                     <div class="genre-grid">
                         ${dramas.map(d => `
@@ -889,16 +913,10 @@ const App = (() => {
         }).join('');
 
         app.innerHTML = `
-            <header class="header-bar">
-                <a class="logo" href="#/">রবীন্দ্রনাথ ঠাকুরের গীতবিতান</a>
-                <nav>
-                    <a href="#/browse">রচনা</a>
-                    <a href="#/dramas">নাটক</a>
-                </nav>
-            </header>
+            ${headerBar()}
             <div class="main-content">
                 <div class="song-view">
-                    <a class="back-link" href="#/dramas">← নাটক</a>
+                    <a class="back-link" href="#/dramas">← নৃত্যনাট্য</a>
                     <div class="song-header-section">
                         <h1 class="song-title">${esc(drama.name_bn)}</h1>
                         ${drama.date_western ? `<div class="song-date">${drama.date_western}</div>` : ''}
@@ -917,6 +935,112 @@ const App = (() => {
     function scrollToItem(number) {
         const el = document.getElementById(`item-${number}`);
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // --- Downloads View ---
+
+    let downloadsManifest = null;
+
+    async function renderDownloads() {
+        const app = document.getElementById('app');
+        app.innerHTML = `
+            ${headerBar()}
+            <div class="main-content">
+                <div class="browse-view">
+                    <h1 class="browse-title">ডাউনলোড</h1>
+                    <p class="browse-subtitle">পিডিএফ এবং অফলাইন সংস্করণ</p>
+                    <div id="downloads-content">
+                        <div class="loading"><div class="spinner"></div> লোড হচ্ছে...</div>
+                    </div>
+                </div>
+            </div>`;
+
+        const container = document.getElementById('downloads-content');
+
+        if (!downloadsManifest) {
+            try {
+                const resp = await fetch('downloads/manifest.json');
+                if (!resp.ok) throw new Error('not found');
+                downloadsManifest = await resp.json();
+            } catch {
+                container.innerHTML = `<p class="downloads-unavailable">ডাউনলোড এই সংস্করণে উপলব্ধ নয়।<br>
+                    <span style="font-size: 0.85rem; color: var(--text-tertiary);">
+                        Downloads are only available on the hosted version.
+                    </span></p>`;
+                return;
+            }
+        }
+
+        let html = '';
+
+        if (downloadsManifest.bundles && downloadsManifest.bundles.length > 0) {
+            html += '<h2 class="downloads-section-title">অফলাইন সংস্করণ</h2>';
+            html += downloadsManifest.bundles.map(b => `
+                <details class="bundle-details">
+                    <summary class="bundle-summary">
+                        <div class="download-info">
+                            <div class="download-name">${esc(b.name)}</div>
+                            <div class="download-desc">${esc(b.description)}</div>
+                        </div>
+                        <div class="download-meta">${esc(b.size)}</div>
+                    </summary>
+                    <div class="terminal">
+                        <div class="terminal-titlebar">
+                            <span class="terminal-dot red"></span>
+                            <span class="terminal-dot yellow"></span>
+                            <span class="terminal-dot green"></span>
+                            <span class="terminal-title">Terminal</span>
+                        </div>
+                        <pre class="terminal-body"><span class="t-prompt">$</span> <span class="t-cmd">unzip</span> gitabitan-web.zip
+<span class="t-dim">Archive:  gitabitan-web.zip
+  inflating: index.html
+  inflating: gitabitan.db
+  inflating: serve.py
+  inflating: css/style.css
+  inflating: js/app.js
+  ...</span>
+
+<span class="t-prompt">$</span> <span class="t-cmd">python3</span> serve.py <span class="t-flag">-h</span>
+<span class="t-out">usage: serve.py [-h] [--port PORT] [--no-open]
+
+Serve the Gitabitan web app
+
+options:
+  -h, --help   show this help message and exit
+  --port PORT  Port to serve on (default: 8080)
+  --no-open    Don't open browser automatically</span>
+
+<span class="t-prompt">$</span> <span class="t-cmd">python3</span> serve.py <span class="t-flag">--port</span> <span class="t-arg">3000</span>
+
+  <span class="t-brand">গীতবিতান</span> — Gitabitan Browser
+  Serving at <span class="t-link">http://localhost:3000</span>
+  Press Ctrl+C to stop
+</pre>
+                    </div>
+                    <a class="download-card bundle-download" href="downloads/${esc(b.file)}" download>
+                        <div class="download-info">
+                            <div class="download-name">ডাউনলোড — ${esc(b.file)}</div>
+                        </div>
+                        <div class="download-meta">${esc(b.size)}</div>
+                    </a>
+                </details>
+            `).join('');
+        }
+
+        if (downloadsManifest.pdfs && downloadsManifest.pdfs.length > 0) {
+            html += '<h2 class="downloads-section-title">পিডিএফ</h2>';
+            html += downloadsManifest.pdfs.map(p => `
+                <a class="download-card" href="downloads/${esc(p.file)}" download>
+                    <div class="download-info">
+                        <div class="download-name">${esc(p.name)}</div>
+                        ${p.count ? `<div class="download-desc">${toBengaliDigits(p.count)} গান</div>` : ''}
+                    </div>
+                    <div class="download-meta">${esc(p.size)}</div>
+                </a>
+            `).join('');
+        }
+
+        container.innerHTML = html;
     }
 
     // --- Helpers ---
