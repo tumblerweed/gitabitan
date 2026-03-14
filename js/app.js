@@ -40,9 +40,11 @@ const App = (() => {
         return `<header class="header-bar">
             <a class="logo" href="#/">রবীন্দ্রনাথ ঠাকুরের গীতবিতান</a>
             <nav>
-                <a href="#/browse">রচনা</a>
+                <a href="#/browse">গান</a>
                 <a href="#/dramas">নৃত্যনাট্য</a>
                 ${dlLink}
+                <button class="theme-btn" title="Switch theme">◑</button>
+                <button class="help-btn" title="Help">?</button>
             </nav>
         </header>`;
     }
@@ -66,13 +68,52 @@ const App = (() => {
                     // Update nav bar if downloads became available
                     const nav = document.querySelector('.header-bar nav');
                     if (nav && downloadsAvailable) {
-                        nav.insertAdjacentHTML('beforeend', '<a href="#/downloads">ডাউনলোড</a>');
+                        const themeBtn = nav.querySelector('.theme-btn');
+                        const dl = document.createElement('a');
+                        dl.href = '#/downloads';
+                        dl.textContent = 'ডাউনলোড';
+                        nav.insertBefore(dl, themeBtn);
                     }
                 })
                 .catch(() => { downloadsAvailable = false; });
 
             route();
             window.addEventListener('hashchange', route);
+
+            // Apply saved theme
+            const savedTheme = localStorage.getItem('gitabitan-theme') || 'warm';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+
+            // Help & theme button delegation
+            document.getElementById('app').addEventListener('click', (e) => {
+                // Help button
+                const helpBtn = e.target.closest('.help-btn');
+                if (helpBtn) {
+                    const hash = location.hash || '#/';
+                    if (hash === '#/' || hash === '') {
+                        showHelpOverlay();
+                    } else {
+                        location.hash = '#/';
+                        setTimeout(showHelpOverlay, 300);
+                    }
+                    return;
+                }
+
+                // Theme toggle
+                const themeBtn = e.target.closest('.theme-btn');
+                if (themeBtn) {
+                    const current = document.documentElement.getAttribute('data-theme') || 'warm';
+                    const next = current === 'warm' ? 'sage' : 'warm';
+                    document.documentElement.setAttribute('data-theme', next);
+                    localStorage.setItem('gitabitan-theme', next);
+                    return;
+                }
+            });
+
+            // First-visit auto-show
+            if (!localStorage.getItem('gitabitan-help-seen') && (!location.hash || location.hash === '#/')) {
+                setTimeout(showHelpOverlay, 500);
+            }
         } catch (err) {
             document.getElementById('app').innerHTML =
                 `<div class="loading" style="color: #c00;">Error loading database: ${esc(err.message)}</div>`;
@@ -82,6 +123,7 @@ const App = (() => {
     // --- Router ---
 
     function route() {
+        hideHelpOverlay();
         const hash = location.hash || '#/';
         const parts = hash.substring(2).split('/');
 
@@ -109,13 +151,16 @@ const App = (() => {
     function renderHome() {
         activeGenreFilter = null;
 
+        const songCount = toBengaliDigits(genres.reduce((sum, g) => sum + g.count, 0));
+        const dramaCount = toBengaliDigits(SearchEngine.getDramas().length);
+
         const app = document.getElementById('app');
         app.innerHTML = `
             ${headerBar()}
             <div class="main-content">
                 <div class="home-view" id="home-view">
                     <h1 class="home-title">রবীন্দ্রনাথ ঠাকুরের গীতবিতান</h1>
-                    <p class="home-subtitle">গান সংকলন — ১,৯০৫ গান</p>
+                    <p class="home-subtitle">গান সংকলন — ${songCount} গান · ${dramaCount} নৃত্যনাট্য</p>
                     <div class="search-container" id="search-container">
                         <input type="text" class="search-bar" id="search-input"
                                placeholder="গান খুঁজুন..." autocomplete="off"
@@ -747,7 +792,7 @@ const App = (() => {
             ${headerBar()}
             <div class="main-content">
                 <div class="browse-view">
-                    <h1 class="browse-title">রচনা সমূহ</h1>
+                    <h1 class="browse-title">গান</h1>
                     <p class="browse-subtitle">বিভাগ অনুসারে গান</p>
                     <div class="genre-grid">
                         ${genres.map(g => `
@@ -774,7 +819,7 @@ const App = (() => {
                 <div class="main-content">
                     <div class="browse-view">
                         <div class="breadcrumb">
-                            <a href="#/browse">রচনা</a>
+                            <a href="#/browse">গান</a>
                             <span class="crumb-sep">›</span>
                             ${esc(genre.name_bn)}
                         </div>
@@ -796,7 +841,7 @@ const App = (() => {
                 <div class="main-content">
                     <div class="browse-view">
                         <div class="breadcrumb">
-                            <a href="#/browse">রচনা</a>
+                            <a href="#/browse">গান</a>
                             <span class="crumb-sep">›</span>
                             ${esc(genre.name_bn)}
                         </div>
@@ -821,7 +866,7 @@ const App = (() => {
             <div class="main-content">
                 <div class="browse-view">
                     <div class="breadcrumb">
-                        <a href="#/browse">রচনা</a>
+                        <a href="#/browse">গান</a>
                         <span class="crumb-sep">›</span>
                         <a href="#/genre/${genreSlug}">${esc(genre.name_bn)}</a>
                         <span class="crumb-sep">›</span>
@@ -1048,6 +1093,205 @@ options:
     function toBengaliDigits(n) {
         const digits = '০১২৩৪৫৬৭৮৯';
         return String(n).replace(/\d/g, d => digits[d]);
+    }
+
+    // --- Help Overlay (Spotlight Coach-Marks) ---
+
+    let helpEscHandler = null;
+    let helpResizeHandler = null;
+    let helpStepIndex = 0;
+    let helpSteps = [];
+
+    function getHelpSteps() {
+        const isMobile = window.innerWidth <= 600;
+        const hasDownloads = !!document.querySelector('.header-bar nav a[href="#/downloads"]');
+
+        const steps = [
+            { selector: '.search-bar', text: 'ইংরেজিতে টাইপ করুন (যেমন \'ami\') — বাংলায় অনুবাদ হবে। একাধিক বিকল্প থাকলে বেছে নিন' },
+            { selector: '.header-bar .logo', text: 'প্রথম পাতায় ফিরে যান' },
+        ];
+
+        if (isMobile) {
+            steps.push({ selector: '.header-bar nav', text: 'বিভাগ অনুসারে গান দেখুন · পিডিএফ ডাউনলোড করুন' });
+        } else {
+            // Group রচনা + নৃত্যনাট্য with a bounding box
+            steps.push({
+                selector: '.header-bar nav a[href="#/browse"]',
+                endSelector: '.header-bar nav a[href="#/dramas"]',
+                text: 'বিভাগ অনুসারে গান দেখুন\nনৃত্যনাট্য ও গীতিনাট্য পড়ুন',
+            });
+            if (hasDownloads) {
+                steps.push({ selector: '.header-bar nav a[href="#/downloads"]', text: 'পিডিএফ ও অফলাইন অ্যাপ ডাউনলোড করুন' });
+            }
+        }
+
+        return steps;
+    }
+
+    function showHelpOverlay() {
+        // Guard: only show on home page
+        const h = location.hash || '#/';
+        if (h !== '#/' && h !== '' && h !== '#') return;
+
+        hideHelpOverlay(true); // remove existing without setting localStorage
+
+        helpSteps = getHelpSteps();
+        helpStepIndex = 0;
+
+        // Create overlay container
+        const overlay = document.createElement('div');
+        overlay.className = 'help-overlay';
+        overlay.innerHTML = `
+            <svg class="help-overlay-svg" width="100%" height="100%">
+                <defs>
+                    <mask id="help-spotlight-mask">
+                        <rect width="100%" height="100%" fill="white"/>
+                        <rect class="help-cutout" rx="8" ry="8" fill="black"/>
+                    </mask>
+                </defs>
+                <rect class="help-dim" width="100%" height="100%" mask="url(#help-spotlight-mask)"/>
+            </svg>
+            <div class="help-tooltip" data-arrow="top">
+                <div class="help-tooltip-text"></div>
+                <div class="help-tooltip-nav">
+                    <span class="help-step-dots"></span>
+                    <button class="help-next-btn"></button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
+
+        // Click on dim area dismisses
+        overlay.querySelector('.help-dim').addEventListener('click', () => hideHelpOverlay());
+
+        // Next / Done button
+        overlay.querySelector('.help-next-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (helpStepIndex < helpSteps.length - 1) {
+                helpStepIndex++;
+                renderHelpStep();
+            } else {
+                hideHelpOverlay();
+            }
+        });
+
+        // ESC handler
+        helpEscHandler = (e) => { if (e.key === 'Escape') hideHelpOverlay(); };
+        document.addEventListener('keydown', helpEscHandler);
+
+        // Resize handler
+        helpResizeHandler = () => {
+            helpSteps = getHelpSteps();
+            if (helpStepIndex >= helpSteps.length) helpStepIndex = helpSteps.length - 1;
+            renderHelpStep();
+        };
+        window.addEventListener('resize', helpResizeHandler);
+
+        renderHelpStep();
+    }
+
+    function renderHelpStep() {
+        const overlay = document.querySelector('.help-overlay');
+        if (!overlay) return;
+
+        const step = helpSteps[helpStepIndex];
+        const target = document.querySelector(step.selector);
+        if (!target) return;
+
+        const rect = target.getBoundingClientRect();
+        // If step spans multiple elements (e.g. রচনা + নৃত্যনাট্য), compute bounding box
+        const endEl = step.endSelector ? document.querySelector(step.endSelector) : null;
+        const endRect = endEl ? endEl.getBoundingClientRect() : rect;
+        const pad = 6;
+        const cutX = Math.min(rect.left, endRect.left) - pad;
+        const cutY = Math.min(rect.top, endRect.top) - pad;
+        const cutW = Math.max(rect.right, endRect.right) - cutX + pad;
+        const cutH = Math.max(rect.bottom, endRect.bottom) - cutY + pad;
+
+        // Update SVG cutout
+        const cutout = overlay.querySelector('.help-cutout');
+        cutout.setAttribute('x', cutX);
+        cutout.setAttribute('y', cutY);
+        cutout.setAttribute('width', cutW);
+        cutout.setAttribute('height', cutH);
+
+        // Update tooltip text
+        const textEl = overlay.querySelector('.help-tooltip-text');
+        textEl.innerHTML = esc(step.text).replace(/\n/g, '<br>');
+
+        // Update step dots
+        const dotsEl = overlay.querySelector('.help-step-dots');
+        dotsEl.innerHTML = helpSteps.map((_, i) =>
+            `<span class="help-dot${i === helpStepIndex ? ' active' : ''}"></span>`
+        ).join('');
+
+        // Update button text
+        const btn = overlay.querySelector('.help-next-btn');
+        btn.textContent = helpStepIndex < helpSteps.length - 1 ? 'পরবর্তী →' : 'বুঝেছি ✓';
+
+        // Position tooltip below the cutout
+        const tip = overlay.querySelector('.help-tooltip');
+        const gap = 12;
+        const margin = 8;
+
+        // Force layout to get tip dimensions
+        tip.style.left = '0px';
+        tip.style.top = '0px';
+        tip.style.visibility = 'hidden';
+        document.body.offsetHeight;
+        const tipRect = tip.getBoundingClientRect();
+        tip.style.visibility = '';
+
+        // Decide placement: below or above
+        const spaceBelow = window.innerHeight - (cutY + cutH + gap);
+        const spaceAbove = cutY - gap;
+        let placementBelow = spaceBelow >= tipRect.height + margin;
+        if (!placementBelow && spaceAbove < tipRect.height + margin) {
+            placementBelow = true; // default to below if neither fits
+        }
+
+        let top, arrowDir;
+        if (placementBelow) {
+            top = cutY + cutH + gap;
+            arrowDir = 'top';
+        } else {
+            top = cutY - gap - tipRect.height;
+            arrowDir = 'bottom';
+        }
+
+        // Center horizontally on the cutout
+        const cutCenterX = cutX + cutW / 2;
+        let left = cutCenterX - tipRect.width / 2;
+        if (left < margin) left = margin;
+        if (left + tipRect.width > window.innerWidth - margin) {
+            left = window.innerWidth - margin - tipRect.width;
+        }
+
+        tip.style.top = top + 'px';
+        tip.style.left = left + 'px';
+        tip.setAttribute('data-arrow', arrowDir);
+
+        // Arrow horizontal position
+        const arrowLeft = cutCenterX - left;
+        tip.style.setProperty('--arrow-left', arrowLeft + 'px');
+    }
+
+    function hideHelpOverlay(skipStorage) {
+        const overlay = document.querySelector('.help-overlay');
+        const wasVisible = !!overlay;
+        if (overlay) overlay.remove();
+
+        if (helpEscHandler) {
+            document.removeEventListener('keydown', helpEscHandler);
+            helpEscHandler = null;
+        }
+        if (helpResizeHandler) {
+            window.removeEventListener('resize', helpResizeHandler);
+            helpResizeHandler = null;
+        }
+
+        if (!skipStorage && wasVisible) {
+            localStorage.setItem('gitabitan-help-seen', '1');
+        }
     }
 
     // Public API
