@@ -1,12 +1,44 @@
 /* === Gitabitan Web App Theme ===
- * Two themes: "warm" (default, Claude-inspired) and "sage" (sage & cream).
+ * Two themes: "sage" (default) and "warm" (Claude-inspired).
  * Toggle via data-theme attribute on <html> or localStorage('gitabitan-theme').
+ * tokens.css provides sage defaults; warm theme overrides all values.
  */
 
+@import url('tokens.css');
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@300;400;500;600;700&display=swap');
 
-/* --- Theme: Warm (default) --- */
-:root, [data-theme="warm"] {
+/* --- Theme: Sage & Cream (default — matches tokens.css) --- */
+:root, [data-theme="sage"] {
+    --bg: #FEFCF3;
+    --surface: #FFFFFF;
+    --surface-hover: #F5F3EC;
+    --border: #E2DDD3;
+    --border-strong: #CFC9BD;
+    --text: #3A3A35;
+    --text-secondary: #65655D;
+    --text-tertiary: #95958A;
+    --accent: #7B8E65;
+    --accent-light: #EFF3EA;
+    --accent-hover: #667A52;
+    --header-bar: #5E6B55;
+    --header-text: #FAFCF6;
+
+    /* Notes */
+    --notes-bg: #F0F3EC;
+    --notes-border: #D0D6C8;
+    --notes-text: #506040;
+}
+
+/* --- Theme: Warm (Claude-inspired) --- */
+[data-theme="warm"] {
+    /* Content colors — override sage tokens */
+    --header-color: #CC0000;
+    --notes-color: #0000CC;
+    --body-color: #000;
+    --date-color: #555;
+    --setting-color: #444;
+
+    /* Web-app variables */
     --bg: #FAF9F6;
     --surface: #FFFFFF;
     --surface-hover: #F5F3EF;
@@ -21,7 +53,7 @@
     --header-bar: #3C3836;
     --header-text: #FAF9F6;
 
-    /* Genre accent colors (pastels) */
+    /* Genre accent colors (warm pastels) */
     --genre-puja: #D4B5E0;
     --genre-prem: #F2B5B5;
     --genre-prakriti: #A8D8B9;
@@ -41,44 +73,6 @@
     --notes-bg: #F0EFFF;
     --notes-border: #D4D0F0;
     --notes-text: #5050A0;
-}
-
-/* --- Theme: Sage & Cream --- */
-[data-theme="sage"] {
-    --bg: #FEFCF3;
-    --surface: #FFFFFF;
-    --surface-hover: #F5F3EC;
-    --border: #E2DDD3;
-    --border-strong: #CFC9BD;
-    --text: #3A3A35;
-    --text-secondary: #65655D;
-    --text-tertiary: #95958A;
-    --accent: #7B8E65;
-    --accent-light: #EFF3EA;
-    --accent-hover: #667A52;
-    --header-bar: #5E6B55;
-    --header-text: #FAFCF6;
-
-    /* Genre accent colors — botanical pastels */
-    --genre-puja: #C9B8D4;
-    --genre-prem: #E8BAB0;
-    --genre-prakriti: #A5CBB0;
-    --genre-bichitra: #B0C5D6;
-    --genre-natya: #E0CDA0;
-    --genre-prem-prakriti: #D6B5BE;
-    --genre-puja-prarthana: #BEB0D4;
-    --genre-swadesh: #A5CBC6;
-    --genre-anushtthanik: #CEC9A5;
-    --genre-bhanusimha: #D6BEA5;
-    --genre-anushtthanik-sangit: #B8CDA5;
-    --genre-jatiya: #A5B8CD;
-    --genre-pathantar-pp: #CDB0B8;
-    --genre-pathantar-b: #A5C9CD;
-
-    /* Notes */
-    --notes-bg: #F0F3EC;
-    --notes-border: #D0D6C8;
-    --notes-text: #506040;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -358,6 +352,33 @@ body {
     transition: opacity 0.15s;
 }
 .api-notification button:hover { opacity: 0.7; }
+
+/* === Browse Discovery Hint === */
+.browse-hint {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.8rem;
+    padding: 0.5rem 1rem;
+    margin-bottom: 0.8rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    background: var(--accent-light);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    max-width: 600px;
+}
+.browse-hint a { color: var(--accent); font-weight: 500; }
+.browse-hint-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-tertiary);
+    font-size: 1.1rem;
+    padding: 0 0.2rem;
+    line-height: 1;
+}
+.browse-hint-close:hover { color: var(--text); }
 
 /* === Genre Filter Chips === */
 .genre-chips {
@@ -824,6 +845,90 @@ body {
 .terminal-body .t-brand { color: #c678dd; font-weight: 600; }
 .terminal-body .t-link { color: #56b6c2; text-decoration: underline; }
 
+/* === Download Sections (collapsible) === */
+.dl-section {
+    margin-bottom: 0.8rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+}
+.dl-section-summary {
+    display: flex;
+    align-items: center;
+    padding: 1rem 1.3rem;
+    cursor: pointer;
+    list-style: none;
+    background: var(--surface);
+    transition: background 0.15s;
+}
+.dl-section-summary::-webkit-details-marker { display: none; }
+.dl-section-summary::marker { content: ''; }
+.dl-section-summary:hover {
+    background: var(--surface-hover);
+}
+.dl-section-summary::before {
+    content: '▸';
+    font-size: 0.85rem;
+    color: var(--text-tertiary);
+    margin-right: 0.7rem;
+    transition: transform 0.2s;
+    flex-shrink: 0;
+}
+.dl-section[open] > .dl-section-summary::before {
+    transform: rotate(90deg);
+}
+.dl-section-icon {
+    margin-right: 0.6rem;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+}
+.dl-section-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.dl-section-desc {
+    font-size: 0.85rem;
+    color: var(--text-tertiary);
+    margin-left: 0.6rem;
+}
+.dl-section-size {
+    font-size: 0.85rem;
+    color: var(--text-tertiary);
+    white-space: nowrap;
+    margin-left: auto;
+    padding-left: 1rem;
+}
+.dl-section-content {
+    padding: 0.5rem 0.8rem 0.8rem;
+    border-top: 1px solid var(--border);
+}
+/* Nested sections (Songs/Dramas inside PDFs) */
+.dl-section-nested {
+    margin-bottom: 0.5rem;
+    border-color: var(--border);
+}
+.dl-section-nested .dl-section-summary {
+    padding: 0.8rem 1rem;
+}
+.dl-section-nested .dl-section-title {
+    font-size: 1rem;
+}
+.download-card-primary {
+    border-left: 3px solid var(--accent);
+}
+.dl-subitems {
+    margin-top: 0.3rem;
+    padding-left: 0.5rem;
+}
+.dl-subitems .download-card {
+    font-size: 0.95rem;
+}
+.dl-subitems .download-name {
+    font-size: 0.95rem;
+    font-weight: 500;
+}
+
 /* === Loading State === */
 .loading {
     display: flex;
@@ -881,6 +986,7 @@ body {
     line-height: 1;
 }
 .help-btn:hover { opacity: 1; }
+.help-btn.disabled { opacity: 0.25; cursor: default; pointer-events: none; }
 
 .theme-btn {
     background: none;

@@ -53,6 +53,7 @@ const App = (() => {
     let candidateTimeout = null;
     let activeCandidateIdx = 0;
     let currentCandidates = [];
+    let songNavCleanup = null;  // cleanup function for song keyboard/swipe handlers
 
     // --- Initialization ---
 
@@ -61,19 +62,11 @@ const App = (() => {
             await SearchEngine.init();
             genres = SearchEngine.getGenres();
 
-            // Check if downloads manifest exists, then show nav link
+            // Check if downloads manifest exists, then re-render to show nav link
             fetch('downloads/manifest.json', { method: 'HEAD' })
                 .then(r => {
                     downloadsAvailable = r.ok;
-                    // Update nav bar if downloads became available
-                    const nav = document.querySelector('.header-bar nav');
-                    if (nav && downloadsAvailable) {
-                        const themeBtn = nav.querySelector('.theme-btn');
-                        const dl = document.createElement('a');
-                        dl.href = '#/downloads';
-                        dl.textContent = 'ডাউনলোড';
-                        nav.insertBefore(dl, themeBtn);
-                    }
+                    if (downloadsAvailable) route();  // re-render with download link
                 })
                 .catch(() => { downloadsAvailable = false; });
 
@@ -81,20 +74,25 @@ const App = (() => {
             window.addEventListener('hashchange', route);
 
             // Apply saved theme
-            const savedTheme = localStorage.getItem('gitabitan-theme') || 'warm';
+            const savedTheme = localStorage.getItem('gitabitan-theme') || 'sage';
             document.documentElement.setAttribute('data-theme', savedTheme);
 
-            // Help & theme button delegation
+            // Help, theme, & browse-hint delegation
             document.getElementById('app').addEventListener('click', (e) => {
+                // Browse hint dismiss
+                const hintClose = e.target.closest('.browse-hint-close');
+                if (hintClose) {
+                    document.getElementById('browse-hint')?.remove();
+                    localStorage.setItem('gitabitan-browse-hint-dismissed', '1');
+                    return;
+                }
+
                 // Help button
                 const helpBtn = e.target.closest('.help-btn');
                 if (helpBtn) {
                     const hash = location.hash || '#/';
                     if (hash === '#/' || hash === '') {
                         showHelpOverlay();
-                    } else {
-                        location.hash = '#/';
-                        setTimeout(showHelpOverlay, 300);
                     }
                     return;
                 }
@@ -124,6 +122,7 @@ const App = (() => {
 
     function route() {
         hideHelpOverlay();
+        if (songNavCleanup) { songNavCleanup(); songNavCleanup = null; }
         const hash = location.hash || '#/';
         const parts = hash.substring(2).split('/');
 
@@ -144,6 +143,14 @@ const App = (() => {
         } else {
             renderHome();
         }
+
+        // Help button is only active on the home page (must run after render replaces header)
+        const helpBtn = document.querySelector('.help-btn');
+        const isHome = hash === '#/' || hash === '' || hash === '#';
+        if (helpBtn) {
+            helpBtn.classList.toggle('disabled', !isHome);
+            helpBtn.title = isHome ? 'Help' : '';
+        }
     }
 
     // --- Home / Search View ---
@@ -153,6 +160,16 @@ const App = (() => {
 
         const songCount = toBengaliDigits(genres.reduce((sum, g) => sum + g.count, 0));
         const dramaCount = toBengaliDigits(SearchEngine.getDramas().length);
+
+        const hintDismissed = localStorage.getItem('gitabitan-browse-hint-dismissed');
+        const browseHint = hintDismissed ? '' : `
+            <div class="browse-hint" id="browse-hint">
+                <span>ব্রাউজ করুন —
+                    <a href="#/browse">গান</a> ·
+                    <a href="#/dramas">নৃত্যনাট্য</a>${downloadsAvailable === true
+                    ? ' · <a href="#/downloads">ডাউনলোড</a>' : ''}</span>
+                <button class="browse-hint-close" aria-label="Dismiss">×</button>
+            </div>`;
 
         const app = document.getElementById('app');
         app.innerHTML = `
@@ -169,6 +186,7 @@ const App = (() => {
                                 title="${BengaliKeyboard.getModeTooltip()}">${BengaliKeyboard.getModeLabel()}</button>
                     </div>
                     <div id="api-notification" class="api-notification"></div>
+                    ${browseHint}
                     <div class="genre-chips" id="genre-chips"></div>
                     <div class="results-container" id="results"></div>
                 </div>
@@ -611,12 +629,49 @@ const App = (() => {
                     ${body}
                     ${notes}
                     <div class="song-nav">
-                        ${adj.prev ? `<a href="#/song/${adj.prev.id}">← ${esc(adj.prev.title_bn)}</a>` : '<span></span>'}
+                        ${adj.prev ? `<a class="nav-prev" href="#/song/${adj.prev.id}">← ${esc(adj.prev.title_bn)}</a>` : '<span></span>'}
                         <a href="#/genre/${song.genre_slug}${song.sub_genre_slug ? '/' + song.sub_genre_slug : ''}">সূচী</a>
-                        ${adj.next ? `<a href="#/song/${adj.next.id}">${esc(adj.next.title_bn)} →</a>` : '<span></span>'}
+                        ${adj.next ? `<a class="nav-next" href="#/song/${adj.next.id}">${esc(adj.next.title_bn)} →</a>` : '<span></span>'}
                     </div>
                 </div>
             </div>`;
+
+        // --- Keyboard arrow + touch swipe navigation ---
+        const prevHref = adj.prev ? `#/song/${adj.prev.id}` : null;
+        const nextHref = adj.next ? `#/song/${adj.next.id}` : null;
+
+        function handleSongKeys(e) {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            if (e.key === 'ArrowLeft' && prevHref) {
+                e.preventDefault(); location.hash = prevHref;
+            } else if (e.key === 'ArrowRight' && nextHref) {
+                e.preventDefault(); location.hash = nextHref;
+            }
+        }
+
+        let touchStartX = 0;
+        function onTouchStart(e) { touchStartX = e.touches[0].clientX; }
+        function onTouchEnd(e) {
+            const dx = e.changedTouches[0].clientX - touchStartX;
+            if (Math.abs(dx) < 60) return;
+            if (dx > 0 && prevHref) location.hash = prevHref;     // swipe right → prev
+            else if (dx < 0 && nextHref) location.hash = nextHref; // swipe left → next
+        }
+
+        document.addEventListener('keydown', handleSongKeys);
+        const content = document.querySelector('.main-content');
+        if (content) {
+            content.addEventListener('touchstart', onTouchStart, { passive: true });
+            content.addEventListener('touchend', onTouchEnd, { passive: true });
+        }
+
+        songNavCleanup = () => {
+            document.removeEventListener('keydown', handleSongKeys);
+            if (content) {
+                content.removeEventListener('touchstart', onTouchStart);
+                content.removeEventListener('touchend', onTouchEnd);
+            }
+        };
     }
 
     // --- Song Body Renderer (ported from lib/render.py) ---
@@ -1017,26 +1072,28 @@ const App = (() => {
         }
 
         let html = '';
+        const m = downloadsManifest;
 
-        if (downloadsManifest.bundles && downloadsManifest.bundles.length > 0) {
-            html += '<h2 class="downloads-section-title">অফলাইন সংস্করণ</h2>';
-            html += downloadsManifest.bundles.map(b => `
-                <details class="bundle-details">
-                    <summary class="bundle-summary">
-                        <div class="download-info">
-                            <div class="download-name">${esc(b.name)}</div>
-                            <div class="download-desc">${esc(b.description)}</div>
-                        </div>
-                        <div class="download-meta">${esc(b.size)}</div>
+        // --- Section 1: App ---
+        if (m.bundles && m.bundles.length > 0) {
+            const b = m.bundles[0];
+            html += `
+                <details class="dl-section">
+                    <summary class="dl-section-summary">
+                        <span class="dl-section-icon">💻</span>
+                        <span class="dl-section-title">অ্যাপ</span>
+                        <span class="dl-section-desc">সার্চসহ অফলাইন ব্রাউজার</span>
+                        <span class="dl-section-size">${esc(b.size)}</span>
                     </summary>
-                    <div class="terminal">
-                        <div class="terminal-titlebar">
-                            <span class="terminal-dot red"></span>
-                            <span class="terminal-dot yellow"></span>
-                            <span class="terminal-dot green"></span>
-                            <span class="terminal-title">Terminal</span>
-                        </div>
-                        <pre class="terminal-body"><span class="t-prompt">$</span> <span class="t-cmd">unzip</span> gitabitan-web.zip
+                    <div class="dl-section-content">
+                        <div class="terminal">
+                            <div class="terminal-titlebar">
+                                <span class="terminal-dot red"></span>
+                                <span class="terminal-dot yellow"></span>
+                                <span class="terminal-dot green"></span>
+                                <span class="terminal-title">Terminal</span>
+                            </div>
+                            <pre class="terminal-body"><span class="t-prompt">$</span> <span class="t-cmd">unzip</span> gitabitan-web.zip
 <span class="t-dim">Archive:  gitabitan-web.zip
   inflating: index.html
   inflating: gitabitan.db
@@ -1061,28 +1118,103 @@ options:
   Serving at <span class="t-link">http://localhost:3000</span>
   Press Ctrl+C to stop
 </pre>
-                    </div>
-                    <a class="download-card bundle-download" href="downloads/${esc(b.file)}" download>
-                        <div class="download-info">
-                            <div class="download-name">ডাউনলোড — ${esc(b.file)}</div>
                         </div>
-                        <div class="download-meta">${esc(b.size)}</div>
-                    </a>
-                </details>
-            `).join('');
+                        <a class="download-card bundle-download" href="downloads/${esc(b.file)}" download>
+                            <div class="download-info">
+                                <div class="download-name">ডাউনলোড — ${esc(b.file)}</div>
+                            </div>
+                            <div class="download-meta">${esc(b.size)}</div>
+                        </a>
+                    </div>
+                </details>`;
         }
 
-        if (downloadsManifest.pdfs && downloadsManifest.pdfs.length > 0) {
-            html += '<h2 class="downloads-section-title">পিডিএফ</h2>';
-            html += downloadsManifest.pdfs.map(p => `
-                <a class="download-card" href="downloads/${esc(p.file)}" download>
-                    <div class="download-info">
-                        <div class="download-name">${esc(p.name)}</div>
-                        ${p.count ? `<div class="download-desc">${toBengaliDigits(p.count)} গান</div>` : ''}
+        // --- Section 2: PDFs ---
+        const hasSongs = m.songs && (m.songs.combined || m.songs.items?.length > 0);
+        const hasDramas = m.dramas && (m.dramas.combined || m.dramas.items?.length > 0);
+        if (m.uber || hasSongs || hasDramas) {
+            const pdfSize = m.uber ? m.uber.size : (m.songs?.combined?.size || '');
+            const songItems = m.songs?.items || [];
+            const dramaItems = m.dramas?.items || [];
+
+            html += `
+                <details class="dl-section">
+                    <summary class="dl-section-summary">
+                        <span class="dl-section-icon">📄</span>
+                        <span class="dl-section-title">পিডিএফ</span>
+                        <span class="dl-section-desc">সম্পূর্ণ, পর্বভিত্তিক ও নাটক</span>
+                        <span class="dl-section-size">${esc(pdfSize)}</span>
+                    </summary>
+                    <div class="dl-section-content">
+                        ${m.uber ? `
+                            <a class="download-card download-card-primary" href="downloads/${esc(m.uber.file)}" download>
+                                <div class="download-info">
+                                    <div class="download-name">${esc(m.uber.name)}</div>
+                                    <div class="download-desc">${esc(m.uber.description)}</div>
+                                </div>
+                                <div class="download-meta">${esc(m.uber.size)}</div>
+                            </a>` : ''}
+
+                        ${hasSongs ? `
+                            <details class="dl-section dl-section-nested">
+                                <summary class="dl-section-summary">
+                                    <span class="dl-section-title">গান</span>
+                                    ${m.songs.combined ? `<span class="dl-section-size">${esc(m.songs.combined.size)}</span>` : ''}
+                                </summary>
+                                <div class="dl-section-content">
+                                    ${m.songs.combined ? `
+                                        <a class="download-card download-card-primary" href="downloads/${esc(m.songs.combined.file)}" download>
+                                            <div class="download-info">
+                                                <div class="download-name">${esc(m.songs.combined.name)}</div>
+                                                ${m.songs.combined.description ? `<div class="download-desc">${esc(m.songs.combined.description)}</div>` : ''}
+                                            </div>
+                                            <div class="download-meta">${esc(m.songs.combined.size)}</div>
+                                        </a>` : ''}
+                                    ${songItems.length > 0 ? `
+                                        <div class="dl-subitems">
+                                            ${songItems.map(p => `
+                                                <a class="download-card" href="downloads/${esc(p.file)}" download>
+                                                    <div class="download-info">
+                                                        <div class="download-name">${esc(p.name)}</div>
+                                                        ${p.count ? `<div class="download-desc">${toBengaliDigits(p.count)} গান</div>` : ''}
+                                                    </div>
+                                                    <div class="download-meta">${esc(p.size)}</div>
+                                                </a>
+                                            `).join('')}
+                                        </div>` : ''}
+                                </div>
+                            </details>` : ''}
+
+                        ${hasDramas ? `
+                            <details class="dl-section dl-section-nested">
+                                <summary class="dl-section-summary">
+                                    <span class="dl-section-title">গীতিনাট্য ও নৃত্যনাট্য</span>
+                                    ${m.dramas.combined ? `<span class="dl-section-size">${esc(m.dramas.combined.size)}</span>` : ''}
+                                </summary>
+                                <div class="dl-section-content">
+                                    ${m.dramas.combined ? `
+                                        <a class="download-card download-card-primary" href="downloads/${esc(m.dramas.combined.file)}" download>
+                                            <div class="download-info">
+                                                <div class="download-name">${esc(m.dramas.combined.name)}</div>
+                                                ${m.dramas.combined.description ? `<div class="download-desc">${esc(m.dramas.combined.description)}</div>` : ''}
+                                            </div>
+                                            <div class="download-meta">${esc(m.dramas.combined.size)}</div>
+                                        </a>` : ''}
+                                    ${dramaItems.length > 0 ? `
+                                        <div class="dl-subitems">
+                                            ${dramaItems.map(d => `
+                                                <a class="download-card" href="downloads/${esc(d.file)}" download>
+                                                    <div class="download-info">
+                                                        <div class="download-name">${esc(d.name)}</div>
+                                                    </div>
+                                                    <div class="download-meta">${esc(d.size)}</div>
+                                                </a>
+                                            `).join('')}
+                                        </div>` : ''}
+                                </div>
+                            </details>` : ''}
                     </div>
-                    <div class="download-meta">${esc(p.size)}</div>
-                </a>
-            `).join('');
+                </details>`;
         }
 
         container.innerHTML = html;

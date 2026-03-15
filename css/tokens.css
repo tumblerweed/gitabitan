@@ -1,0 +1,36 @@
+/* === Gitabitan Design Tokens ===
+ * Shared values imported by both:
+ *   - styles/theme.css (browsable HTML, PDF, EPUB)
+ *   - web/css/style.css (web app)
+ *
+ * Default palette is sage — the canonical look across all artifacts.
+ * The web app's warm theme overrides these in style.css.
+ */
+
+:root {
+    /* Typography */
+    --font-bengali: 'Noto Sans Bengali', 'Kalpurush', sans-serif;
+
+    /* Content colors — sage palette (default) */
+    --header-color: #5E6B55;
+    --notes-color: #506040;
+    --body-color: #3A3A35;
+    --date-color: #65655D;
+    --setting-color: #5A5A52;
+
+    /* Genre accent colors — botanical pastels */
+    --genre-puja: #C9B8D4;
+    --genre-prem: #E8BAB0;
+    --genre-prakriti: #A5CBB0;
+    --genre-bichitra: #B0C5D6;
+    --genre-natya: #E0CDA0;
+    --genre-prem-prakriti: #D6B5BE;
+    --genre-puja-prarthana: #BEB0D4;
+    --genre-swadesh: #A5CBC6;
+    --genre-anushtthanik: #CEC9A5;
+    --genre-bhanusimha: #D6BEA5;
+    --genre-anushtthanik-sangit: #B8CDA5;
+    --genre-jatiya: #A5B8CD;
+    --genre-pathantar-pp: #CDB0B8;
+    --genre-pathantar-b: #A5C9CD;
+}
